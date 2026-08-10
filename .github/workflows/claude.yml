@@ -1,0 +1,61 @@
+name: Claude Code (reusable)
+
+# Reusable Claude Code Action job, shared across J-MaFf repos. Callers keep only
+# their `on:` trigger block and a thin `uses:` stub — the @claude mention filter,
+# permissions, git-policies fetch, and the action invocation all live here, so
+# version bumps happen once instead of once per repo.
+#
+# The `github` context inside a called workflow is the CALLER's context, so the
+# mention filter below sees the caller repo's event payload.
+
+on:
+  workflow_call:
+
+jobs:
+  claude:
+    # Only run when "@claude" is mentioned in the relevant comment, review, issue body, or issue title.
+    if: |
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+    # ubuntu-latest: the action installs the Claude CLI here reliably (it cannot on
+    # windows-latest). Windows-specific test execution lives in each repo's own workflows.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read # Required for Claude to read CI results on PRs
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      # Pull the shared git-policies conventions into CLAUDE.md so @claude follows
+      # them on every run. The rules live in the private claude-skills repo and are
+      # published to this public URL; we fetch them fresh each run (no token needed).
+      # Soft-fails: if the fetch is unavailable, the job still runs without them.
+      - name: Load git-policies into CLAUDE.md
+        run: |
+          url="https://raw.githubusercontent.com/J-MaFf/J-MaFf.github.io/main/claude/git-policies.md"
+          if curl -fsSL "$url" -o /tmp/git-policies.md; then
+            {
+              printf '\n<!-- BEGIN git-policies (fetched at runtime from %s) -->\n' "$url"
+              cat /tmp/git-policies.md
+              printf '\n<!-- END git-policies -->\n'
+            } >> CLAUDE.md
+            echo "Loaded git-policies into CLAUDE.md ($(wc -l < /tmp/git-policies.md) lines)."
+          else
+            echo "::warning::Could not fetch git-policies from $url; proceeding without it."
+          fi
+
+      - name: Run Claude Code
+        uses: anthropics/claude-code-action@v1
+        with:
+          # Authenticate with a Claude Pro/Max subscription OAuth token (generated via `claude setup-token`)
+          # instead of a pay-as-you-go ANTHROPIC_API_KEY. Stored as the CLAUDE_CODE_OAUTH_TOKEN repo secret,
+          # reaching this workflow via the caller's `secrets: inherit`.
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
