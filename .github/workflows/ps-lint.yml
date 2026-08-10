@@ -38,8 +38,10 @@ jobs:
           fetch-depth: 1
 
       - name: Parse-check all PowerShell scripts
+        env:
+          LINT_PATHS: ${{ inputs.paths }}
         run: |
-          $roots = @('${{ inputs.paths }}' -split '\s+' | Where-Object { $_ -and (Test-Path $_) })
+          $roots = @($env:LINT_PATHS -split '\s+' | Where-Object { $_ -and (Test-Path $_) })
           if (-not $roots) {
               Write-Host 'None of the configured paths exist; nothing to lint.'
               exit 0
@@ -72,13 +74,15 @@ jobs:
           }
 
       - name: Run PSScriptAnalyzer (fail on Error severity only)
+        env:
+          LINT_PATHS: ${{ inputs.paths }}
         run: |
           if (-not (Get-Module -ListAvailable -Name PSScriptAnalyzer)) {
               Write-Host 'Installing PSScriptAnalyzer...'
               Install-Module PSScriptAnalyzer -Scope CurrentUser -Force -SkipPublisherCheck
           }
           Import-Module PSScriptAnalyzer
-          $roots = @('${{ inputs.paths }}' -split '\s+' | Where-Object { $_ -and (Test-Path $_) })
+          $roots = @($env:LINT_PATHS -split '\s+' | Where-Object { $_ -and (Test-Path $_) })
           if (-not $roots) {
               Write-Host 'None of the configured paths exist; nothing to analyze.'
               exit 0
