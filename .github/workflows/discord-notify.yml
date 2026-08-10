@@ -1,0 +1,29 @@
+name: discord-notify
+on:
+  workflow_call:
+    secrets:
+      DISCORD_CI_WEBHOOK:
+        required: true
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post failure to Discord
+        env:
+          WEBHOOK_URL: ${{ secrets.DISCORD_CI_WEBHOOK }}
+          REPO: ${{ github.repository }}
+          WORKFLOW: ${{ github.workflow }}
+          REF: ${{ github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$WEBHOOK_URL" ]; then
+            echo "::error::DISCORD_CI_WEBHOOK secret is not set"
+            exit 1
+          fi
+          payload=$(jq -n \
+            --arg repo "$REPO" \
+            --arg workflow "$WORKFLOW" \
+            --arg ref "$REF" \
+            --arg url "$RUN_URL" \
+            '{content: "**\($repo)** — workflow `\($workflow)` failed on `\($ref)`\n\($url)"}')
+          curl -sS -f -X POST -H "Content-Type: application/json" -d "$payload" "$WEBHOOK_URL"
