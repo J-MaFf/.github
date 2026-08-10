@@ -13,7 +13,7 @@ jobs:
           WEBHOOK_URL: ${{ secrets.DISCORD_CI_WEBHOOK }}
           REPO: ${{ github.repository }}
           WORKFLOW: ${{ github.workflow }}
-          REF: ${{ github.ref_name }}
+          REF: ${{ github.head_ref || github.ref_name }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           if [ -z "$WEBHOOK_URL" ]; then
