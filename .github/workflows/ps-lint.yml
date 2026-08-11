@@ -6,7 +6,7 @@ name: PowerShell Lint (reusable)
 # job must NEVER execute repo scripts; several repos contain scripts that
 # self-elevate, block on Read-Host, or permanently modify the runner.
 #
-# Runs on the self-hosted win-test runner (Windows Server 2025, pwsh 7.6+).
+# Runs on the self-hosted GH-RUNNER-FLAUI runner (Windows Server 2025, pwsh 7.6+).
 # The PSScriptAnalyzer install persists there, so the guarded install is a
 # no-op after the first run.
 
