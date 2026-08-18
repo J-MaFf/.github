@@ -1,0 +1,122 @@
+name: Release (reusable)
+
+# Reusable release-packaging job, shared across J-MaFf repos. Builds a
+# filtered zip from caller-specified paths and publishes a GitHub Release for
+# the tag that triggered the calling workflow. Callers keep only their
+# tag-push `on:` trigger and a thin `uses:` stub naming their own
+# `include-paths`.
+#
+# The `github` context inside a called workflow is the CALLER's context, so
+# `github.event.repository.name` and `github.ref_name` below resolve to the
+# calling repo's name and the tag that triggered it, not this repo's.
+
+on:
+  workflow_call:
+    inputs:
+      include-paths:
+        description: >-
+          Required, space-separated list of paths, relative to the calling
+          repo's root, to include in the release zip. No default — unlike
+          ps-lint.yml's lenient '.' default, a silent whole-repo default here
+          would defeat the purpose of this workflow. Any listed path that
+          doesn't exist in the checkout fails the job rather than being
+          silently skipped, because a missing expected path in a release is a
+          packaging bug that must stop the release.
+        type: string
+        required: true
+
+jobs:
+  release:
+    # ubuntu-latest: zip-building and `gh release create` need no
+    # Windows-specific behavior, matching this org's precedent of reserving
+    # self-hosted Windows runners for jobs that actually require Windows
+    # (e.g. ps-lint.yml's static analysis, pester-tests.yml's Windows-only
+    # Pester suite).
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Verify include-paths exist
+        env:
+          INCLUDE_PATHS: ${{ inputs.include-paths }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for p in $INCLUDE_PATHS; do
+            if [ ! -e "$p" ]; then
+              echo "::error::include-paths entry '$p' does not exist in the checkout."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "One or more include-paths entries are missing from the checkout; failing the release build." >&2
+            exit 1
+          fi
+
+      - name: Build release zip
+        env:
+          INCLUDE_PATHS: ${{ inputs.include-paths }}
+          REPO_NAME: ${{ github.event.repository.name }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          work_dir="$(mktemp -d)"
+          top_level="${REPO_NAME}-${TAG_NAME}"
+          stage_dir="${work_dir}/${top_level}"
+          mkdir -p "$stage_dir"
+          for p in $INCLUDE_PATHS; do
+            dest="${stage_dir}/${p}"
+            mkdir -p "$(dirname "$dest")"
+            cp -R "$p" "$dest"
+          done
+          zip_name="${top_level}.zip"
+          ( cd "$work_dir" && zip -r -X "${GITHUB_WORKSPACE}/${zip_name}" "$top_level" ) >/dev/null
+          echo "ZIP_NAME=${zip_name}" >> "$GITHUB_ENV"
+
+      - name: Extract release notes from CHANGELOG.md
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${TAG_NAME#v}"
+          notes_file="$(mktemp)"
+          found=0
+          if [ -f CHANGELOG.md ]; then
+            if awk -v heading="## [${version}]" '
+                found && index($0, "## [") == 1 { exit }
+                index($0, heading) == 1 { found = 1; next }
+                found { print }
+                END { exit(found ? 0 : 1) }
+              ' CHANGELOG.md > "$notes_file"; then
+              found=1
+            fi
+          fi
+          if [ "$found" -eq 1 ] && [ -s "$notes_file" ]; then
+            echo "NOTES_FILE=${notes_file}" >> "$GITHUB_ENV"
+            echo "USE_GENERATED_NOTES=false" >> "$GITHUB_ENV"
+          else
+            # No CHANGELOG.md, or no `## [<version>]` heading found: fall
+            # back to gh's auto-generated notes instead of failing the job.
+            echo "USE_GENERATED_NOTES=true" >> "$GITHUB_ENV"
+          fi
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [ "$USE_GENERATED_NOTES" = "true" ]; then
+            gh release create "$TAG_NAME" "$ZIP_NAME" \
+              --title "$TAG_NAME" \
+              --generate-notes
+          else
+            gh release create "$TAG_NAME" "$ZIP_NAME" \
+              --title "$TAG_NAME" \
+              --notes-file "$NOTES_FILE"
+          fi
