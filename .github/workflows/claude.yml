@@ -59,3 +59,9 @@ jobs:
           # instead of a pay-as-you-go ANTHROPIC_API_KEY. Stored as the CLAUDE_CODE_OAUTH_TOKEN repo secret,
           # reaching this workflow via the caller's `secrets: inherit`.
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # The action's Bash tool is disabled by default; --allowedTools is additive to
+          # its built-in GitHub tools, not a replacement, so this only opens up the specific
+          # gh subcommands listed below. GH_TOKEN/GITHUB_TOKEN are already exported into the
+          # process env by the action, so gh auth works once Bash access is granted.
+          claude_args: |
+            --allowedTools "Bash(gh issue edit:*)"
