@@ -15,6 +15,7 @@ Healthy. Three reusable workflows, all adopted fleet-wide.
 | `.github/workflows/claude.yml` | Full Claude Code Action job (@claude mention filter, permissions, git-policies fetch, `claude-code-action@v1`). Callers keep triggers + a `uses:` stub with `secrets: inherit`. Adopted by ~25 repos. |
 | `.github/workflows/ps-lint.yml` | PowerShell static lint: parse-check + PSScriptAnalyzer (Error-severity fail only) on the self-hosted `windows` runner. `paths` input scopes directories. Static-only — never executes repo scripts. |
 | `.github/workflows/discord-notify.yml` | Posts CI-failure messages to Discord `#ci`. Callers add a `notify` job with `if: failure()`. |
+| `.github/workflows/release.yml` | Builds a filtered release zip from caller-specified `include-paths` and publishes (or, if the tag was re-pushed, updates) a GitHub Release for the tag that triggered the calling workflow. Callers keep a `push: tags:` trigger + a `uses:` stub. |
 | `README.md` | Adoption instructions for each workflow. |
 
 ### Resolved Issues
