@@ -20,7 +20,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   instead of unconditionally calling `gh release create`, which failed with "a release
   with the same tag name already exists" whenever a `vX.Y.Z` tag was re-pushed to a new
   commit after its release was first published
-  ([#13](https://github.com/J-MaFf/.github/issues/13))
+  ([#14](https://github.com/J-MaFf/.github/pull/14))
 
 ## [1.0.0] — 2026-08-09
 ### Added

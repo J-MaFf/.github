@@ -23,6 +23,7 @@ Healthy. Three reusable workflows, all adopted fleet-wide.
 |---|---|---|
 | [#1](https://github.com/J-MaFf/.github/issues/1) | Discord notify showed PR merge ref instead of branch | [#2](https://github.com/J-MaFf/.github/pull/2) |
 | [#3](https://github.com/J-MaFf/.github/issues/3) | Add reusable claude.yml and ps-lint.yml workflows | [#4](https://github.com/J-MaFf/.github/pull/4) |
+| [#13](https://github.com/J-MaFf/.github/issues/13) | release.yml failed whenever a re-pushed tag already had a release | [#14](https://github.com/J-MaFf/.github/pull/14) |
 
 ### Open Issues
 None.
