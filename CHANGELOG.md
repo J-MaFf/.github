@@ -11,6 +11,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   Error-severity fail only, `paths` input) workflows; adopted fleet-wide across ~25 repos
   ([#4](https://github.com/J-MaFf/.github/pull/4))
 - `STATUS.md` and `CHANGELOG.md` ([#6](https://github.com/J-MaFf/.github/pull/6))
+- Reusable `merge-gate.yml`: the required check that blocks PRs the claude-sandbox GitHub
+  App (`homelab-sandbox-agent[bot]`) authored or committed to until the approver approves
+  the current head, plus the review-triggered re-run of the stale pull_request-event run.
+  Moved from J-MaFf/homelab so every repo enrolled in the overnight sandbox shares it;
+  `app`/`approver` inputs, callers name their file `merge-gate.yml` and their job
+  `merge-gate` (check context `merge-gate / merge-gate`)
+  ([#15](https://github.com/J-MaFf/.github/issues/15))
+
+### Changed
+- `claude.yml` never runs for `homelab-sandbox-agent[bot]`, so the sandbox App cannot
+  trigger the Claude Code Action (which holds `CLAUDE_CODE_OAUTH_TOKEN` and contents:
+  write) in any repo it is installed on ([#15](https://github.com/J-MaFf/.github/issues/15))
 
 ### Fixed
 - Discord notify: use `head_ref` instead of the PR merge ref so pull_request-triggered
