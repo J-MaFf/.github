@@ -39,7 +39,9 @@ jobs:
 
 The `@claude` mention filter lives inside the reusable workflow (the `github` context in
 a called workflow is the caller's), so callers don't repeat it. Each repo needs the
-`CLAUDE_CODE_OAUTH_TOKEN` secret set (generated via `claude setup-token`):
+`CLAUDE_CODE_OAUTH_TOKEN` secret set (generated via `claude setup-token`). The job never
+runs for `homelab-sandbox-agent[bot]`, the claude-sandbox App, so the App cannot reach the
+token through an `@claude` mention:
 
 ```bash
 gh secret set CLAUDE_CODE_OAUTH_TOKEN --repo <owner>/<repo>
@@ -79,6 +81,45 @@ Optionally scope which directories are linted (space-separated, missing ones ski
 No secrets required. The caller repo must have the self-hosted `windows` runner
 registered. Repo-specific checks (module-manifest validation, smoke tests, Pester
 suites) stay in the caller as additional jobs.
+
+## merge-gate.yml
+
+The required check for repos enrolled in the claude-sandbox overnight runs
+(J-MaFf/homelab `claude-sandbox/`). A PR the sandbox GitHub App
+(`homelab-sandbox-agent[bot]`) authored, or authored or committed any commit of, passes
+only once the approver (`J-MaFf`) has approved its current head. PRs the App never
+touched pass at once. On a review, a second job re-runs the pull_request-event run on the
+head SHA when its verdict is stale, since that run is the one the ruleset sees.
+
+### Adopt in another repo
+
+The file **must** be `.github/workflows/merge-gate.yml` (the re-run job looks up the
+caller's runs by that file name) and the job **must** be `merge-gate`, so the check
+reports as `merge-gate / merge-gate`:
+
+```yaml
+name: merge-gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  pull_request_review:
+    types: [submitted, dismissed]
+
+permissions: {}
+
+jobs:
+  merge-gate:
+    uses: J-MaFf/.github/.github/workflows/merge-gate.yml@main
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: write
+```
+
+`app` and `approver` inputs override the defaults. Then require the check in the repo's
+`main` ruleset as context `merge-gate / merge-gate`, integration_id `15368` (GitHub
+Actions). In the homelab setup `claude-sandbox/github/enroll-repo.sh` does both.
 
 ## discord-notify.yml
 

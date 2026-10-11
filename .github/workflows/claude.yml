@@ -13,12 +13,17 @@ on:
 
 jobs:
   claude:
-    # Only run when "@claude" is mentioned in the relevant comment, review, issue body, or issue title.
+    # Never for the claude-sandbox GitHub App (J-MaFf/homelab claude-sandbox/): it is
+    # installed on every repo enrolled in the overnight sandbox, and this job runs with
+    # CLAUDE_CODE_OAUTH_TOKEN and contents: write. Otherwise only when "@claude" is
+    # mentioned in the relevant comment, review, issue body, or issue title.
     if: |
+      github.actor != 'homelab-sandbox-agent[bot]' && (
       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
       (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+      )
     # ubuntu-latest: the action installs the Claude CLI here reliably (it cannot on
     # windows-latest). Windows-specific test execution lives in each repo's own workflows.
     runs-on: ubuntu-latest

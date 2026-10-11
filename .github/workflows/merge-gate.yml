@@ -1,0 +1,120 @@
+# merge-gate (reusable) — the required check that keeps the claude-sandbox GitHub App
+# (homelab-sandbox-agent) from merging its own work into `main` in any repo it is installed
+# on. Moved here from J-MaFf/homelab so every repo enrolled in the overnight sandbox runs the
+# same logic (J-MaFf/homelab claude-sandbox/README.md, "Enrolling a repo").
+#
+# Passes at once on PRs the App had no hand in. If the App authored the PR, or authored or
+# committed any of its commits, it passes only once the approver has approved the current
+# head; pull_request_review re-checks it on approval or dismissal, and the ruleset's
+# dismiss_stale_reviews_on_push drops that approval on the next push. The App cannot fake
+# this check: it has no Checks, Statuses, Actions or Workflows permission, and the ruleset
+# pins the check to GitHub Actions (integration_id 15368).
+#
+# Callers MUST name their workflow file `.github/workflows/merge-gate.yml`:
+# sync-pull-request-run looks up the caller's runs as actions/workflows/merge-gate.yml/runs.
+# The caller job must be called `merge-gate`, so the check reports as
+# `merge-gate / merge-gate`, the context the rulesets require. Caller:
+#
+#   on:
+#     pull_request:
+#       types: [opened, synchronize, reopened]
+#     pull_request_review:
+#       types: [submitted, dismissed]
+#   permissions: {}
+#   jobs:
+#     merge-gate:
+#       uses: J-MaFf/.github/.github/workflows/merge-gate.yml@main
+#       permissions:
+#         contents: read
+#         pull-requests: read
+#         actions: write
+name: merge-gate
+on:
+  workflow_call:
+    inputs:
+      app:
+        description: Login of the GitHub App whose PRs need the approver's approval
+        type: string
+        default: homelab-sandbox-agent[bot]
+      approver:
+        description: Login whose approval of the current head lets an App PR pass
+        type: string
+        default: J-MaFf
+
+permissions: {}
+
+jobs:
+  merge-gate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Require the approver's approval on PRs the sandbox App touched
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          APP: ${{ inputs.app }}
+          APPROVER: ${{ inputs.approver }}
+        run: |
+          set -euo pipefail
+          # Login, or the App's noreply email (<id>+<login>@users.noreply.github.com, as
+          # provision.sh configures it) in case GitHub didn't link a commit to the account.
+          app_commits=$(gh api --paginate "repos/$REPO/pulls/$PR/commits" --jq \
+            ".[] | select(.author.login == \"$APP\" or .committer.login == \"$APP\"
+                          or (.commit.author.email | endswith(\"+$APP@users.noreply.github.com\"))
+                          or (.commit.committer.email | endswith(\"+$APP@users.noreply.github.com\")))
+                 | .sha[0:12]")
+          if [[ "$AUTHOR" != "$APP" && -z "$app_commits" ]]; then
+            echo "PASS: no $APP involvement (author $AUTHOR)"
+            exit 0
+          fi
+          echo "PR #$PR involves $APP (author $AUTHOR; App commits: ${app_commits:-none})"
+          # The approver's latest decisive review must be an approval of this exact head.
+          latest=$(gh api --paginate "repos/$REPO/pulls/$PR/reviews" --jq \
+            ".[] | select(.user.login == \"$APPROVER\" and (.state == \"APPROVED\" or .state == \"CHANGES_REQUESTED\" or .state == \"DISMISSED\"))
+                 | \"\(.submitted_at) \(.state) \(.commit_id)\"" | sort | tail -n1)
+          read -r _ state commit <<<"${latest:-- none none}"
+          if [[ "$state" == APPROVED && "$commit" == "$HEAD_SHA" ]]; then
+            echo "PASS: $APPROVER approved head $HEAD_SHA"
+            exit 0
+          fi
+          echo "::error::merge-gate: PR #$PR needs $APPROVER's approval of head ${HEAD_SHA:0:12} (latest review: ${latest:-none})"
+          exit 1
+
+  # A review's own merge-gate run doesn't unblock the PR: each event's run is a separate
+  # check suite, and the required check stays failed while the pull_request-event run on
+  # the head SHA does (J-MaFf/homelab#691). So after a review, re-run that run when its
+  # verdict is stale; it re-reads the reviews and lands where this run did. The run looked
+  # up is the CALLER's workflow file, merge-gate.yml (see the header).
+  sync-pull-request-run:
+    needs: merge-gate
+    if: always() && github.event_name == 'pull_request_review'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Re-run the pull_request-event merge-gate run if its verdict is stale
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          VERDICT: ${{ needs.merge-gate.result }}
+        run: |
+          set -euo pipefail
+          read -r id status conclusion < <(gh api \
+            "repos/$REPO/actions/workflows/merge-gate.yml/runs?event=pull_request&head_sha=$HEAD_SHA&per_page=1" \
+            --jq '.workflow_runs[0] // {} | "\(.id // "none") \(.status // "-") \(.conclusion // "-")"')
+          if [[ "$id" == none ]]; then
+            echo "no pull_request-event run for ${HEAD_SHA:0:12}; nothing to sync"
+          elif [[ "$status" != completed ]]; then
+            echo "run $id is $status; it reads the reviews when it runs, so leaving it"
+          elif [[ "$conclusion" == "$VERDICT" ]]; then
+            echo "run $id already concluded $conclusion; nothing to sync"
+          else
+            echo "run $id concluded $conclusion, this review says $VERDICT; re-running it"
+            gh api -X POST "repos/$REPO/actions/runs/$id/rerun" >/dev/null
+          fi
