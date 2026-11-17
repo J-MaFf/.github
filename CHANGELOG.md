@@ -6,6 +6,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Adopted beads (bd) for AI task tracking: Dolt-only sync, CLAUDE.md/AGENTS.md guidance, `bd prime` hooks ([#18](https://github.com/J-MaFf/.github/pull/18))
 - Reusable `claude.yml` (full Claude Code Action job — mention filter, permissions,
   git-policies fetch) and `ps-lint.yml` (PowerShell parse-check + PSScriptAnalyzer,
   Error-severity fail only, `paths` input) workflows; adopted fleet-wide across ~25 repos
