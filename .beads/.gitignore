@@ -85,3 +85,4 @@ bd.db
 hooks/
 issues.jsonl
 interactions.jsonl
+README.md
